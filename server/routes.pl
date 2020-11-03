@@ -4319,11 +4319,15 @@ squash_handler(post, Path, Request, System_DB, Auth) :-
         error(bad_api_document(Document, [commit_info]), _)),
 
     catch_with_backtrace(
-        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit),
-            cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
+        (   api_squash(System_DB, Auth, Path, Commit_Info, Commit, Old_Commit)
+        ->  cors_reply_json(Request, _{'@type' : 'api:SquashResponse',
                                        'api:commit' : Commit,
                                        'api:old_commit' : Old_Commit,
-                                       'api:status' : "api:success"})),
+                                       'api:status' : "api:success"})
+        ;   cors_reply_json(Request, _{'@type' : 'api:EmptySquashResponse',
+                                       'api:empty_commit' : true,
+                                       'api:status' : "api:success"})
+        ),
         Error,
         do_or_die(squash_error_handler(Error, Request),
                   Error)).
@@ -4436,6 +4440,28 @@ test(squash_a_branch, [
 
     resolve_absolute_string_descriptor(Old_Commit_Path, Old_Commit_Descriptor),
     commit_descriptor{ commit_id : Commit_Id } :< Old_Commit_Descriptor.
+
+
+test(squash_empty_branch, [
+         setup((setup_temp_server(State, Server),
+                create_db_without_schema("admin", "test"))),
+         cleanup(teardown_temp_server(State))
+     ]) :-
+
+    atomic_list_concat([Server, '/api/squash/admin/test'], URI),
+
+    Commit_Info = commit_info{
+                      author : "me",
+                      message: "Squash"
+                  },
+
+    admin_pass(Key),
+    http_post(URI,
+              json(_{ commit_info: Commit_Info}),
+              JSON,
+              [json_object(dict),authorization(basic(admin,Key))]),
+
+    JSON.'@type' = "api:EmptySquashResponse".
 
 :- end_tests(squash_endpoint).
 
